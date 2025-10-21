@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PM Interview Prep Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div id="app"></div>
+
+    <script>
+        // Simple state management
+        let state = {
+            isLoggedIn: false,
+            currentUser: null,
+            currentView: 'overview',
+            currentTerm: 'T2',
+            showConversation: false,
+            conversations: [
+                { id: 1, user: 'master', name: 'Vidhu', message: 'Great start on T2!', date: '15 Oct 2025' },
+                { id: 2, user: 'student', name: 'Akash', message: 'Thanks! Will work harder.', date: '15 Oct 2025' }
+            ],
+            updateLog: [
+                { id: 1, field: 'T2 - Group Cases', oldValue: 3, newValue: 5, date: '20 Oct 2025' }
+            ],
+            kpiData: {
+                T2: { group: 5, peer: 2, mentor: 0, target: 25, teardowns: 1, teardownTarget: 3, study: 60, practice: 40, cvs: 2, docs: 5 },
+                T3: { group: 8, peer: 3, mentor: 2, target: 35, teardowns: 1, teardownTarget: 4, study: 80, practice: 60, cvs: 5, docs: 12 },
+                T4: { group: 10, peer: 5, mentor: 5, target: 30, teardowns: 0, teardownTarget: 5, study: 70, practice: 80, cvs: 8, docs: 20 },
+                T5: { group: 5, peer: 3, mentor: 5, target: 20, teardowns: 0, teardownTarget: 4, study: 50, practice: 70, cvs: 10, docs: 25 },
+                T6: { group: 3, peer: 5, mentor: 7, target: 20, teardowns: 0, teardownTarget: 3, study: 40, practice: 80, cvs: 12, docs: 30 }
+            },
+            verticals: {
+                'Product Sense': { 'Product Improvement': 2, 'New Product': 3, 'Favorite Product': 1, target: 40 },
+                'Product Metrics': { 'Metrics Definition': 2, 'Debugging': 1, 'A/B Testing': 1, target: 35 },
+                'Root Cause': { 'Metric Drop': 2, 'User Behavior': 1, 'Failure': 1, target: 30 },
+                'Strategy': { 'Go-to-Market': 1, 'Pricing': 1, 'Competition': 1, target: 25 }
+            }
+        };
+
+        const users = {
+            student: { password: 'Akash$123$', name: 'Akash', role: 'student' },
+            master: { password: 'Vidhu$123', name: 'Vidhu', role: 'master' }
+        };
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (!state.isLoggedIn) {
+                app.innerHTML = `
+                    <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
+                        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+                            <h1 class="text-3xl font-bold text-center mb-2">PM Prep Tracker</h1>
+                            <p class="text-center text-gray-600 mb-8">Login to access dashboard</p>
+                            <form onsubmit="handleLogin(event)" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-semibold mb-2">Username</label>
+                                    <input type="text" id="username" class="w-full px-4 py-3 border rounded-lg" placeholder="Enter username" required>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold mb-2">Password</label>
+                                    <input type="password" id="password" class="w-full px-4 py-3 border rounded-lg" placeholder="Enter password" required>
+                                </div>
+                                <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm"></div>
+                                <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700">Login</button>
+                            </form>
+                            <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                                <p class="text-xs text-center text-gray-600">student: Akash$123$ | master: Vidhu$123</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            const canEdit = state.currentUser.role === 'student';
+            const canSeeResources = state.currentUser.role === 'student';
+            const currentData = state.kpiData[state.currentTerm];
+            const totalCases = currentData.group + currentData.peer + currentData.mentor;
+            const progress = Math.round((totalCases / currentData.target) * 100);
+
+            app.innerHTML = `
+                <div class="min-h-screen bg-gray-50 p-4">
+                    <div class="max-w-7xl mx-auto">
+                        <!-- Header -->
+                        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <div>
+                                    <h1 class="text-2xl font-bold">PM Interview Prep Tracker</h1>
+                                    <p class="text-sm text-gray-600">Welcome, <span class="text-indigo-600 font-semibold">${state.currentUser.name}</span> (${state.currentUser.role})</p>
+                                </div>
+                                <div class="flex gap-3">
+                                    <button onclick="toggleConversation()" class="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200">
+                                        Messages (${state.conversations.length})
+                                    </button>
+                                    <button onclick="logout()" class="px-4 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200">
+                                        Logout
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- View Tabs -->
+                            <div class="flex gap-2 mb-4">
+                                <button onclick="changeView('overview')" class="px-4 py-2 rounded-lg font-semibold ${state.currentView === 'overview' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}">
+                                    Overview
+                                </button>
+                                <button onclick="changeView('vertical')" class="px-4 py-2 rounded-lg font-semibold ${state.currentView === 'vertical' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}">
+                                    Vertical Tracking
+                                </button>
+                                ${canSeeResources ? `
+                                <button onclick="changeView('resources')" class="px-4 py-2 rounded-lg font-semibold ${state.currentView === 'resources' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}">
+                                    Resources
+                                </button>
+                                ` : ''}
+                            </div>
+
+                            <!-- Term Selector -->
+                            ${state.currentView === 'overview' ? `
+                            <div class="flex gap-2">
+                                ${['T2', 'T3', 'T4', 'T5', 'T6'].map(term => `
+                                    <button onclick="changeTerm('${term}')" class="px-4 py-2 rounded-lg font-semibold ${state.currentTerm === term ? 'bg-indigo-600 text-white' : 'bg-gray-100'}">
+                                        ${term}
+                                    </button>
+                                `).join('')}
+                            </div>
+                            ` : ''}
+                        </div>
+
+                        <!-- Conversation Panel -->
+                        ${state.showConversation ? `
+                        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-xl font-bold">Conversation</h3>
+                                <button onclick="toggleConversation()" class="text-gray-500 hover:text-gray-700">Close</button>
+                            </div>
+                            <div class="space-y-3 mb-4 max-h-96 overflow-y-auto">
+                                ${state.conversations.map(conv => `
+                                    <div class="p-4 rounded-lg ${conv.user === 'master' ? 'bg-purple-50' : 'bg-blue-50'}">
+                                        <div class="flex justify-between mb-2">
+                                            <span class="font-semibold">${conv.name}</span>
+                                            <span class="text-xs text-gray-500">${conv.date}</span>
+                                        </div>
+                                        <p class="text-sm">${conv.message}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="flex gap-2">
+                                <input type="text" id="newComment" placeholder="Type message..." class="flex-1 px-4 py-2 border rounded-lg">
+                                <button onclick="addComment()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Send</button>
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        <!-- Overview View -->
+                        ${state.currentView === 'overview' ? `
+                        <div>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                                <!-- Cases Card -->
+                                <div class="bg-white rounded-xl shadow-md p-5">
+                                    <div class="text-2xl font-bold mb-3">${progress}%</div>
+                                    <h3 class="text-sm font-semibold mb-2">Cases Progress</h3>
+                                    <div class="space-y-1 text-xs">
+                                        <div class="flex justify-between">
+                                            <span>Group:</span>
+                                            <input type="number" value="${currentData.group}" onchange="updateField('group', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span>Peer:</span>
+                                            <input type="number" value="${currentData.peer}" onchange="updateField('peer', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span>Mentor:</span>
+                                            <input type="number" value="${currentData.mentor}" onchange="updateField('mentor', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                        <div class="flex justify-between border-t pt-1">
+                                            <span>Target:</span>
+                                            <input type="number" value="${currentData.target}" onchange="updateField('target', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Teardowns Card -->
+                                <div class="bg-white rounded-xl shadow-md p-5">
+                                    <div class="text-2xl font-bold mb-3">${currentData.teardowns}/${currentData.teardownTarget}</div>
+                                    <h3 class="text-sm font-semibold mb-2">Product Teardowns</h3>
+                                    <div class="space-y-1 text-xs">
+                                        <div class="flex justify-between">
+                                            <span>Done:</span>
+                                            <input type="number" value="${currentData.teardowns}" onchange="updateField('teardowns', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span>Target:</span>
+                                            <input type="number" value="${currentData.teardownTarget}" onchange="updateField('teardownTarget', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Hours Card -->
+                                <div class="bg-white rounded-xl shadow-md p-5">
+                                    <div class="text-2xl font-bold mb-3">${currentData.study + currentData.practice}h</div>
+                                    <h3 class="text-sm font-semibold mb-2">Total Hours</h3>
+                                    <div class="space-y-1 text-xs">
+                                        <div class="flex justify-between">
+                                            <span>Study:</span>
+                                            <input type="number" value="${currentData.study}" onchange="updateField('study', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span>Practice:</span>
+                                            <input type="number" value="${currentData.practice}" onchange="updateField('practice', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Deliverables Card -->
+                                <div class="bg-white rounded-xl shadow-md p-5">
+                                    <div class="text-2xl font-bold mb-3">${currentData.cvs}</div>
+                                    <h3 class="text-sm font-semibold mb-2">Deliverables</h3>
+                                    <div class="space-y-1 text-xs">
+                                        <div class="flex justify-between">
+                                            <span>CVs:</span>
+                                            <input type="number" value="${currentData.cvs}" onchange="updateField('cvs', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span>Docs:</span>
+                                            <input type="number" value="${currentData.docs}" onchange="updateField('docs', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded ${!canEdit ? 'bg-gray-100' : ''}">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        <!-- Vertical Tracking View -->
+                        ${state.currentView === 'vertical' ? `
+                        <div>
+                            ${Object.entries(state.verticals).map(([vertical, data]) => {
+                                const topics = Object.entries(data).filter(([k]) => k !== 'target');
+                                const total = topics.reduce((sum, [, val]) => sum + val, 0);
+                                const percent = Math.round((total / data.target) * 100);
+                                return `
+                                <div class="bg-white rounded-xl shadow-md p-6 mb-4">
+                                    <h3 class="text-lg font-bold mb-2">${vertical}</h3>
+                                    <p class="text-sm text-gray-600 mb-4">${total} / ${data.target} (${percent}%)</p>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        ${topics.map(([topic, count]) => `
+                                            <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                                                <span class="text-sm font-medium">${topic}</span>
+                                                <input type="number" value="${count}" onchange="updateVertical('${vertical}', '${topic}', this.value)" ${!canEdit ? 'disabled' : ''} class="w-16 px-2 py-1 border rounded text-center ${!canEdit ? 'bg-gray-100' : ''}" min="0">
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        ` : ''}
+
+                        <!-- Resources View -->
+                        ${state.currentView === 'resources' && canSeeResources ? `
+                        <div class="bg-white rounded-xl shadow-md p-6">
+                            <h3 class="text-xl font-bold mb-4">Premium Resources</h3>
+                            <div class="space-y-6">
+                                <div>
+                                    <h4 class="text-lg font-semibold text-indigo-600 mb-2">Product Sense & Design</h4>
+                                    <p class="text-sm mb-1"><strong>Courses:</strong> Exponent Product Design (9.5/10), Reforge Product Strategy (9.8/10)</p>
+                                    <p class="text-sm"><strong>Books:</strong> Inspired by Marty Cagan, The Design of Everyday Things, Hooked</p>
+                                </div>
+                                <div>
+                                    <h4 class="text-lg font-semibold text-purple-600 mb-2">Product Metrics & Analytics</h4>
+                                    <p class="text-sm mb-1"><strong>Courses:</strong> Reforge Growth Series (9.7/10), Mode Analytics SQL (9.0/10)</p>
+                                    <p class="text-sm"><strong>Books:</strong> Lean Analytics, The Lean Startup</p>
+                                </div>
+                                <div>
+                                    <h4 class="text-lg font-semibold text-green-600 mb-2">Root Cause Analysis</h4>
+                                    <p class="text-sm mb-1"><strong>Courses:</strong> Exponent RCA Masterclass (9.3/10)</p>
+                                    <p class="text-sm"><strong>Books:</strong> Cracked It, Case in Point</p>
+                                </div>
+                                <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg p-6 text-white">
+                                    <h4 class="text-lg font-bold mb-3">Daily Practice Routine</h4>
+                                    <ul class="space-y-2 text-sm">
+                                        <li>• Daily Product Teardown (15-20 min)</li>
+                                        <li>• 1 Case Study Problem (30-45 min)</li>
+                                        <li>• Read 2 PM Blog Posts</li>
+                                        <li>• Track Metrics for Apps You Use</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        <!-- Update Log -->
+                        <div class="bg-white rounded-xl shadow-md p-6 mt-6">
+                            <h3 class="text-lg font-bold mb-4">Recent Updates</h3>
+                            <div class="space-y-2">
+                                ${state.updateLog.slice().reverse().map(log => `
+                                    <div class="p-3 bg-gray-50 rounded-lg border">
+                                        <div class="flex justify-between mb-1">
+                                            <span class="text-sm font-semibold">${log.field}</span>
+                                            <span class="text-xs text-gray-500">${log.date}</span>
+                                        </div>
+                                        <p class="text-sm">
+                                            Updated: <span class="text-red-600 font-medium">${log.oldValue}</span> → <span class="text-green-600 font-medium">${log.newValue}</span>
+                                        </p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const user = users[username];
+            
+            if (user && user.password === password) {
+                state.isLoggedIn = true;
+                state.currentUser = { username, ...user };
+                render();
+            } else {
+                const errorDiv = document.getElementById('error');
+                errorDiv.classList.remove('hidden');
+                errorDiv.textContent = 'Invalid username or password';
+            }
+        }
+
+        function logout() {
+            state.isLoggedIn = false;
+            state.currentUser = null;
+            render();
+        }
+
+        function changeView(view) {
+            state.currentView = view;
+            render();
+        }
+
+        function changeTerm(term) {
+            state.currentTerm = term;
+            render();
+        }
+
+        function toggleConversation() {
+            state.showConversation = !state.showConversation;
+            render();
+        }
+
+        function updateField(field, value) {
+            const oldValue = state.kpiData[state.currentTerm][field];
+            state.kpiData[state.currentTerm][field] = parseInt(value) || 0;
+            logUpdate(state.currentTerm + ' - ' + field, oldValue, value);
+            render();
+        }
+
+        function updateVertical(vertical, topic, value) {
+            const oldValue = state.verticals[vertical][topic];
+            state.verticals[vertical][topic] = parseInt(value) || 0;
+            logUpdate(vertical + ' - ' + topic, oldValue, value);
+            render();
+        }
+
+        function addComment() {
+            const input = document.getElementById('newComment');
+            const message = input.value.trim();
+            if (message && state.currentUser) {
+                const now = new Date();
+                state.conversations.push({
+                    id: state.conversations.length + 1,
+                    user: state.currentUser.role,
+                    name: state.currentUser.name,
+                    message: message,
+                    date: now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                });
+                render();
+            }
+        }
+
+        function logUpdate(field, oldValue, newValue) {
+            const now = new Date();
+            state.updateLog.push({
+                id: state.updateLog.length + 1,
+                field: field,
+                oldValue: oldValue,
+                newValue: newValue,
+                date: now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+            });
+        }
+
+        // Initial render
+        render();
+    </script>
+</body>
+</html>
